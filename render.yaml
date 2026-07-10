@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: doctor-scheduler-backend
+    env: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        sync: false
