@@ -56,18 +56,19 @@ export async function connectGoogleAccount(payload, requestContext = {}) {
     redirectUri: payload.redirectUri
   });
 
-  if (payload.doctorId) {
-    const doctor = await getDoctorById(payload.doctorId);
-    if (doctor) {
-      await updateDocument(COLLECTIONS.DOCTORS, payload.doctorId, {
-        ...doctor,
-        googleOwnerId: payload.ownerId,
-        googleCalendarId: payload.calendarId || doctor.googleCalendarId || 'primary',
-        updatedAt: nowIso(),
-        updatedAtMs: nowMs()
-      });
-    }
-  }
+const doctorId = payload.doctorId || payload.ownerId;
+
+const doctor = await getDoctorById(doctorId);
+
+if (doctor) {
+  await updateDocument(COLLECTIONS.DOCTORS, doctorId, {
+    ...doctor,
+    googleOwnerId: payload.ownerId,
+    googleCalendarId: payload.calendarId || doctor.googleCalendarId || 'primary',
+    updatedAt: nowIso(),
+    updatedAtMs: nowMs()
+  });
+}
 
   await recordSchedulingLog({
     type: 'google.connected',
