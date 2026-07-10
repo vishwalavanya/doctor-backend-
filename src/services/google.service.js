@@ -80,7 +80,8 @@ export function generateGoogleAuthUrl({ redirectUri, ownerId } = {}) {
     );
   }
 
-const resolvedRedirectUri = 'http://localhost:3000/auth/google/callback';
+const resolvedRedirectUri =
+  redirectUri || process.env.GOOGLE_REDIRECT_URI;
 
   if (!resolvedRedirectUri) {
     throw createError(

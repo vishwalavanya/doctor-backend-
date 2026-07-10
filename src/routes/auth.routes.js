@@ -10,7 +10,7 @@ router.get('/auth/google/callback', asyncHandler(async (req, res) => {
   const { code, state } = req.query;
 const ownerId = state;
   
-  const redirectUri = "http://localhost:3000/auth/google/callback";
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
 
   if (!code || !ownerId) {
     return sendError(res, 'code and ownerId are required', 400, {
