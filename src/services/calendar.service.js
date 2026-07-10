@@ -58,17 +58,31 @@ export async function connectGoogleAccount(payload, requestContext = {}) {
 
 const doctorId = payload.doctorId || payload.ownerId;
 
+console.log("========== GOOGLE CONNECT ==========");
+console.log("Doctor ID:", doctorId);
+
 const doctor = await getDoctorById(doctorId);
 
+console.log("Doctor Found:", doctor);
+
 if (doctor) {
-  await updateDocument(COLLECTIONS.DOCTORS, doctorId, {
-    ...doctor,
-    googleOwnerId: payload.ownerId,
-    googleCalendarId: payload.calendarId || doctor.googleCalendarId || 'primary',
-    updatedAt: nowIso(),
-    updatedAtMs: nowMs()
-  });
+  const updatedDoctor = await updateDocument(
+    COLLECTIONS.DOCTORS,
+    doctorId,
+    {
+      ...doctor,
+      googleOwnerId: payload.ownerId,
+      googleCalendarId:
+        payload.calendarId || doctor.googleCalendarId || "primary",
+      updatedAt: nowIso(),
+      updatedAtMs: nowMs()
+    }
+  );
+
+  console.log("Updated Doctor:", updatedDoctor);
 }
+
+console.log("===================================");
 
   await recordSchedulingLog({
     type: 'google.connected',
