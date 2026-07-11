@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { zoomConfig, isZoomConfigured } from '../config/zoom.js';
 import { COLLECTIONS } from '../utils/constants.js';
-import { addDocument } from './firestore.service.js';
+import { addDocument, queryDocuments } from './firestore.service.js';
 import { createError, nowIso, nowMs, uuid } from '../utils/helpers.js';
 import { logger } from '../utils/logger.js';
 import { getCachedValue, setCachedValue } from './cache.service.js';
@@ -132,6 +132,13 @@ export async function saveMeetingHistory({
   return record;
 }
 
+export async function getMeetingHistoryByMeetingId(meetingId) {
+  if (!meetingId) return null;
+  const matches = await queryDocuments(COLLECTIONS.MEETING_HISTORY, [['meetingId', '==', String(meetingId)]]);
+  if (matches.length === 0) return null;
+  return matches.sort((left, right) => (right.createdAtMs || 0) - (left.createdAtMs || 0))[0];
+}
+
 export function getZoomStatus() {
   return {
     configured: isZoomConfigured(),
@@ -140,4 +147,3 @@ export function getZoomStatus() {
     hasClientSecret: Boolean(zoomConfig.clientSecret)
   };
 }
-

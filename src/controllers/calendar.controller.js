@@ -17,7 +17,10 @@ import { generateGoogleAuthUrl, listGoogleCalendars } from '../services/google.s
 export const generateGoogleAuthUrlController = asyncHandler(async (req, res) => {
 const authUrl = generateGoogleAuthUrl({
   redirectUri: req.query.redirectUri || req.body?.redirectUri,
-  ownerId: req.query.ownerId || req.body?.ownerId
+  // Prefer the authenticated doctor's id (from the JWT) so the frontend no
+  // longer needs to pass ?ownerId=xxxx manually. Falls back to the legacy
+  // query/body value for any caller that isn't authenticated yet.
+  ownerId: req.userId || req.query.ownerId || req.body?.ownerId
 });
 
   return res.status(200).json({
@@ -57,7 +60,7 @@ export const listCalendarEventsController = asyncHandler(async (req, res) => {
 });
 
 export const listGoogleCalendarsController = asyncHandler(async (req, res) => {
-  const calendars = await listGoogleCalendars(req.query.ownerId || req.body.ownerId);
+  const calendars = await listGoogleCalendars(req.userId || req.query.ownerId || req.body.ownerId);
   return sendSuccess(res, calendars, 'Google calendars fetched', 200, { requestId: req.requestId });
 });
 

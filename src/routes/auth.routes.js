@@ -2,10 +2,32 @@ import { Router } from 'express';
 import { asyncHandler } from '../middlewares/request.middleware.js';
 import { connectGoogleAccount } from '../services/calendar.service.js';
 import { sendError, sendSuccess } from '../utils/response.js';
+import { authenticate } from '../middlewares/auth.middleware.js';
+import {
+  registerController,
+  loginController,
+  meController,
+  updateProfileController,
+  changePasswordController,
+  logoutController
+} from '../controllers/auth.controller.js';
 
 const router = Router();
-const DEFAULT_GOOGLE_SUCCESS_REDIRECT = 'http://localhost:5173/google-success';
+const DEFAULT_GOOGLE_SUCCESS_REDIRECT = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/google-success`;
 
+// -------------------------------------------------------------------------
+// Doctor authentication (register / login / profile / password / logout)
+// -------------------------------------------------------------------------
+router.post('/auth/register', registerController);
+router.post('/auth/login', loginController);
+router.get('/auth/me', authenticate, meController);
+router.put('/auth/profile', authenticate, updateProfileController);
+router.put('/auth/change-password', authenticate, changePasswordController);
+router.post('/auth/logout', authenticate, logoutController);
+
+// -------------------------------------------------------------------------
+// Google OAuth callback (existing, unchanged)
+// -------------------------------------------------------------------------
 router.get('/auth/google/callback', asyncHandler(async (req, res) => {
   const { code, state } = req.query;
 const ownerId = state;
@@ -49,15 +71,7 @@ const ownerId = state;
     });
   }
 
-  return sendSuccess(
-  res,
-  record,
-  "Google account connected successfully",
-  200,
-  {
-    requestId: req.requestId
-  }
-);
+  return res.redirect(302, DEFAULT_GOOGLE_SUCCESS_REDIRECT);
 }));
 
 export default router;
