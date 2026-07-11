@@ -27,6 +27,7 @@ import {
 } from './google.service.js';
 import { enqueueJob } from '../queue/queue.service.js';
 import { recordSchedulingLog } from './log.service.js';
+import { logger } from '../utils/logger.js';
 import { getDoctorById } from './doctor.service.js';
 import { getAppointmentById } from './appointment.service.js';
 import { cacheCalendarEvents, getCalendarEventsCache, invalidateByPrefix } from './cache.service.js';
@@ -116,14 +117,45 @@ export async function createCalendarEvent(payload, requestContext = {}) {
     googleEventId: null
   };
 
-  const event = await addDocument(COLLECTIONS.CALENDAR_EVENTS, record);
+  let event = await addDocument(COLLECTIONS.CALENDAR_EVENTS, record);
   invalidateByPrefix('calendar:events:');
 
-  if (record.syncWithGoogle && doctor.googleOwnerId && doctor.googleCalendarId) {
+  const shouldSyncWithGoogle = Boolean(
+    record.syncWithGoogle && doctor.googleOwnerId && doctor.googleCalendarId
+  );
+
+  if (shouldSyncWithGoogle) {
+    // Keep the queue job for retry/tracking/webhook-matching purposes exactly
+    // as before. syncCalendarEventToGoogle is idempotent for the 'create'
+    // action (see below), so if this queued job drains AFTER the immediate
+    // sync below has already stored the googleEventId, it will not create a
+    // duplicate Google Calendar event.
     enqueueJob(QUEUE_NAMES.GOOGLE_SYNC, JOB_TYPES.CALENDAR_EVENT_CREATE, {
       doctorId: doctor.id,
       event: event
     });
+
+    // Await the Google Calendar sync immediately so that the API response
+    // for POST /calendar/events reflects the real googleEventId instead of
+    // null. Without this, the response was sent before the background queue
+    // worker (polling every 500ms) had a chance to create the Google event
+    // and persist googleEventId back to Firestore.
+    try {
+      await syncCalendarEventToGoogle(event.id, 'create');
+      const refreshed = await getDocument(COLLECTIONS.CALENDAR_EVENTS, event.id);
+      if (refreshed) {
+        event = refreshed;
+      }
+    } catch (error) {
+      // Do not fail event creation if Google sync fails immediately -
+      // the already-enqueued queue job will retry via the existing
+      // retry/backoff mechanism, keeping current architecture intact.
+      logger.error('Immediate Google Calendar sync failed for new event, will retry via queue', {
+        eventId: event.id,
+        doctorId: doctor.id,
+        error: error?.message || error
+      });
+    }
   }
 
   await recordSchedulingLog({
@@ -136,7 +168,8 @@ export async function createCalendarEvent(payload, requestContext = {}) {
     requestId: requestContext.requestId,
     metadata: {
       startTime: event.startTime,
-      endTime: event.endTime
+      endTime: event.endTime,
+      googleEventId: event.googleEventId || null
     }
   });
 
@@ -380,7 +413,15 @@ export async function syncCalendarEventToGoogle(eventId, action = 'create') {
 
   let googleEvent = null;
   if (action === 'create') {
-    googleEvent = await createGoogleCalendarEvent(doctor.googleOwnerId, doctor.googleCalendarId, eventPayload);
+    if (event.googleEventId) {
+      // Idempotency guard: this event was already synced to Google (e.g. by
+      // the immediate/awaited sync performed inside createCalendarEvent).
+      // Avoid creating a duplicate Google Calendar event when this job is
+      // later drained from the queue for the same event.
+      googleEvent = event.rawEvent || { id: event.googleEventId };
+    } else {
+      googleEvent = await createGoogleCalendarEvent(doctor.googleOwnerId, doctor.googleCalendarId, eventPayload);
+    }
   } else if (action === 'update') {
     if (event.googleEventId) {
       googleEvent = await updateGoogleCalendarEvent(doctor.googleOwnerId, doctor.googleCalendarId, event.googleEventId, eventPayload);
